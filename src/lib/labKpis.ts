@@ -89,7 +89,7 @@ export function formatHold(hours: number) {
 
 /** Open cases and restoration units (teeth, min 1 per case) still in the lab. */
 export function inFlight(cases: KpiCase[]) {
-  const open = cases.filter((c) => !["delivered", "cancelled", "remade"].includes(c.status));
+  const open = cases.filter((c) => !["delivered", "cancelled", "remake_spawned"].includes(c.status));
   return { cases: open.length, units: open.reduce((a, c) => a + Math.max(1, c.teeth?.length || 0), 0) };
 }
 
