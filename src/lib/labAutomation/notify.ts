@@ -1,7 +1,7 @@
 // Step 3: fire-and-forget lab alerts from the browser. Never blocks or breaks the technician's action.
 import { supabase } from "@/integrations/supabase/client";
 import { dispatchLabNotification } from "./dispatch.functions";
-import { triggerForTransition, type LabTrigger } from "./triggers";
+import type { LabTrigger } from "./triggers";
 
 export async function notifyLab(orgId: string | null | undefined, caseId: string, trigger: LabTrigger) {
   if (!orgId) return;
@@ -15,8 +15,7 @@ export async function notifyLab(orgId: string | null | undefined, caseId: string
   }
 }
 
-/** Sends the alert a status change calls for (on hold → hold alert, delivered → dispatch alert). */
-export function notifyLabTransition(orgId: string | null | undefined, caseId: string, from: string | null | undefined, to: string) {
-  const t = triggerForTransition(from, to);
-  if (t && t !== "case_on_hold") void notifyLab(orgId, caseId, t);
+/** A move into "delivered" tells the clinic the case has left the lab. */
+export function notifyIfDispatched(orgId: string | null | undefined, caseId: string, toStatus: string) {
+  if (toStatus === "delivered") void notifyLab(orgId, caseId, "case_dispatched");
 }
