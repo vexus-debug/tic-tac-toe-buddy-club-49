@@ -2,19 +2,103 @@
   "source": "https://github.com/vexus-debug/tic-tac-toe-buddy-club-24.git",
   "scope": "Import repository files and install dependencies only; no tests or validation per user request.",
   "capabilities": [
-    { "capability": "code", "source": "public GitHub repository", "outcome": "import", "status": "pending", "next_action": "Import source files, excluding repository metadata, environment files, and generated dependencies." },
-    { "capability": "schema", "source": "Supabase migration files", "outcome": "import files only", "status": "pending", "next_action": "No database migration is applied in this import-only task." },
-    { "capability": "records", "source": "Supabase", "outcome": "pending", "status": "pending", "next_action": "No record export was provided." },
-    { "capability": "auth identities", "source": "Supabase", "outcome": "pending", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "authorization", "source": "Repository", "outcome": "pending", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "uploaded file bytes", "source": "Repository/Supabase", "outcome": "pending", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "external providers", "source": "Repository configuration", "outcome": "preserve source references", "status": "pending", "next_action": "Secret files are excluded; provider connections are not verified." },
-    { "capability": "public endpoints", "source": "Repository", "outcome": "import files only", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "callbacks", "source": "Repository", "outcome": "import files only", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "webhooks", "source": "Repository", "outcome": "import files only", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "schedules", "source": "Repository", "outcome": "import files only", "status": "pending", "next_action": "Not migrated or verified in this import-only task." },
-    { "capability": "secrets", "source": "Source .env excluded", "outcome": "excluded", "status": "pending", "next_action": "Configure required values through secure project settings if needed." },
-    { "capability": "cutover", "source": "Repository", "outcome": "not performed", "status": "pending", "next_action": "No production cutover was requested." },
-    { "capability": "verification", "source": "User request", "outcome": "not performed", "status": "pending", "next_action": "User will perform checks and tests." }
+    {
+      "capability": "code",
+      "source": "public GitHub repository",
+      "outcome": "import",
+      "status": "imported",
+      "next_action": "None for the requested file import."
+    },
+    {
+      "capability": "schema",
+      "source": "Supabase migration files",
+      "outcome": "import files only",
+      "status": "pending",
+      "next_action": "No database migration is applied in this import-only task."
+    },
+    {
+      "capability": "records",
+      "source": "Supabase",
+      "outcome": "pending",
+      "status": "pending",
+      "next_action": "No record export was provided."
+    },
+    {
+      "capability": "auth identities",
+      "source": "Supabase",
+      "outcome": "pending",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "authorization",
+      "source": "Repository",
+      "outcome": "pending",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "uploaded file bytes",
+      "source": "Repository/Supabase",
+      "outcome": "pending",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "external providers",
+      "source": "Repository configuration",
+      "outcome": "preserve source references",
+      "status": "pending",
+      "next_action": "Secret files are excluded; provider connections are not verified."
+    },
+    {
+      "capability": "public endpoints",
+      "source": "Repository",
+      "outcome": "import files only",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "callbacks",
+      "source": "Repository",
+      "outcome": "import files only",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "webhooks",
+      "source": "Repository",
+      "outcome": "import files only",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "schedules",
+      "source": "Repository",
+      "outcome": "import files only",
+      "status": "pending",
+      "next_action": "Not migrated or verified in this import-only task."
+    },
+    {
+      "capability": "secrets",
+      "source": "Source .env excluded",
+      "outcome": "excluded",
+      "status": "pending",
+      "next_action": "Configure required values through secure project settings if needed."
+    },
+    {
+      "capability": "cutover",
+      "source": "Repository",
+      "outcome": "not performed",
+      "status": "pending",
+      "next_action": "No production cutover was requested."
+    },
+    {
+      "capability": "verification",
+      "source": "User request",
+      "outcome": "not performed",
+      "status": "pending",
+      "next_action": "User will perform checks and tests."
+    }
   ]
 }
