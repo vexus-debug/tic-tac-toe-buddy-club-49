@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { format, subDays, differenceInCalendarDays } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus, AlertTriangle, Zap, Truck, Inbox, PauseCircle, ShieldCheck, ArrowRight, Clock3, PackageCheck, Building2, Gauge,
+  Plus, AlertTriangle, Zap, Truck, Inbox, PauseCircle, ShieldCheck, ArrowRight, Clock3, PackageCheck, Building2, Gauge, RotateCcw, Send, MessageCircle, Play,
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader } from "@/components/dashboard/PageHeader";
@@ -13,7 +13,12 @@ import { Badge } from "@/components/ui/badge";
 import { LAB_STAGES, normalizeStage, stageLabel } from "@/config/dentalLab";
 import { useLabCases, type LabCaseRow } from "@/hooks/useLabCases";
 import { useOrg } from "@/hooks/useOrg";
-import { clientOf, patientOf, isRush, isOverdue } from "@/hooks/useDentalLab";
+import { clientOf, patientOf, isRush, isOverdue, useHoldCase } from "@/hooks/useDentalLab";
+import { useLabRecords } from "@/hooks/useLabRecords";
+import { useLabWorkCalendar } from "@/hooks/useLabWorkCalendar";
+import { onTimeDelivery, remakeSplit, holdAging, inFlight, holdHours, formatHold, STALLED_HOURS } from "@/lib/labKpis";
+import { notifyLab } from "@/lib/labAutomation/notify";
+import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { money } from "./dlabMoney";
 import { NewCaseDialog } from "./DlabCasesPage";
@@ -45,8 +50,21 @@ function dueLabel(c: LabCaseRow) {
 }
 
 export default function DlabOverviewPage() {
-  const { basePath } = useOrg();
+  const { basePath, currentOrg } = useOrg();
   const { data: cases = [], isLoading } = useLabCases();
+  const { data: claims = [] } = useLabRecords("warranties");
+  const { cal } = useLabWorkCalendar();
+  const hold = useHoldCase();
+  const [resending, setResending] = useState<string | null>(null);
+  const k4 = useMemo(() => {
+    const now = new Date();
+    return {
+      otd: onTimeDelivery(cases as any, { now, cal }),
+      remake: remakeSplit(cases as any, claims as any, { now }),
+      holds: holdAging(cases as any, now),
+      flight: inFlight(cases as any),
+    };
+  }, [cases, claims, cal]);
   const [creating, setCreating] = useState(false);
   const [queue, setQueue] = useState<Queue>("urgent");
   const [stageFilter, setStageFilter] = useState<string | null>(null);
@@ -94,7 +112,7 @@ export default function DlabOverviewPage() {
     return {
       active, late, rush, urgent,
       dueToday: active.filter((c) => c.due_date === today),
-      held: active.filter((c) => c.status === "on_hold"),
+      held: active.filter((c) => c.status === "on_hold").sort((a, b) => holdHours(b as any) - holdHours(a as any)),
       ready: active.filter((c) => normalizeStage(c.status) === "ready"),
       receivedToday: live.filter((c) => dayKey(c.created_at) === today).length,
       wipValue: active.reduce((a, c) => a + fee(c), 0),
@@ -107,13 +125,28 @@ export default function DlabOverviewPage() {
     };
   }, [cases]);
 
+  const otdTone: Tone = k4.otd.pct === null ? "info" : k4.otd.pct >= 95 ? "success" : k4.otd.pct >= 85 ? "warning" : "destructive";
+  const { remake } = k4;
   const kpis: { label: string; value: string; sub: string; icon: typeof Inbox; tone: Tone; queue?: Queue }[] = [
-    { label: "In production", value: String(s.active.length), sub: `${money(s.wipValue)} work in progress`, icon: Inbox, tone: "primary" },
+    { label: "In flight", value: String(k4.flight.units), sub: `units · ${k4.flight.cases} cases · ${money(s.wipValue)}`, icon: Inbox, tone: "primary" },
+    { label: "On-time delivery (30d)", value: k4.otd.pct === null ? "—" : `${k4.otd.pct}%`, sub: k4.otd.delivered ? `${k4.otd.onTime}/${k4.otd.delivered} on time · target 95%` : "No deliveries yet", icon: ShieldCheck, tone: otdTone },
+    { label: "Remakes (90d)", value: `${remake.pct}%`, sub: remake.remakes ? `Lab ${remake.share.lab}% · Clinic ${remake.share.clinic}% · Material ${remake.share.material}%` : "No remakes", icon: RotateCcw, tone: remake.pct >= 3.5 ? "warning" : "success" },
+    { label: "Active holds", value: String(k4.holds.count), sub: k4.holds.count ? `${k4.holds.stalled} over ${STALLED_HOURS}h · avg ${formatHold(k4.holds.avgHours)}` : "Nothing blocked", icon: PauseCircle, tone: k4.holds.stalled ? "destructive" : k4.holds.count ? "warning" : "success", queue: "hold" },
     { label: "Due today", value: String(s.dueToday.length), sub: `${s.ready.length} ready to ship`, icon: Truck, tone: s.dueToday.length ? "warning" : "info", queue: "today" },
     { label: "Late & rush", value: String(s.urgent.length), sub: `${s.late.length} late · ${s.rush.length} rush`, icon: AlertTriangle, tone: s.late.length ? "destructive" : "success", queue: "urgent" },
-    { label: "On time (30d)", value: s.onTimePct === null ? "—" : `${s.onTimePct}%`, sub: `Avg turnaround ${s.tat.toFixed(1)} days`, icon: ShieldCheck, tone: s.onTimePct !== null && s.onTimePct < 85 ? "warning" : "success" },
-    { label: "On hold", value: String(s.held.length), sub: s.held.length ? "Waiting on clinic" : "Nothing blocked", icon: PauseCircle, tone: s.held.length ? "warning" : "success", queue: "hold" },
   ];
+
+  const resend = async (c: LabCaseRow) => {
+    setResending(c.id);
+    await notifyLab(currentOrg?.org_id, c.id, "case_on_hold");
+    setResending(null);
+    toast({ title: "Hold alert sent again", description: "Already-delivered messages are not repeated." });
+  };
+  const waLink = (c: LabCaseRow) => {
+    const phone = (c.external_client_phone || "").replace(/\D/g, "").replace(/^0/, "234");
+    const msg = `Hello${c.clinic_doctor_name ? ` Dr ${c.clinic_doctor_name}` : ""}, case ${c.case_number} (${patientOf(c)}) is on hold: ${(c as any).hold_reason || "we need your input"}. Please reply so we can continue.`;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  };
 
   const queues: { key: Queue; label: string; rows: LabCaseRow[]; empty: string }[] = [
     { key: "urgent", label: "Late & rush", rows: s.urgent, empty: "Nothing late or rushed." },
@@ -137,7 +170,7 @@ export default function DlabOverviewPage() {
       </PageHeader>
 
       {/* KPI pulse */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {kpis.map((k, i) => {
           const Comp = k.queue ? motion.button : motion.div;
           const active = k.queue && !stageFilter && queue === k.queue;
@@ -305,6 +338,7 @@ export default function DlabOverviewPage() {
                 <motion.ul key={`${queue}-${stageFilter}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="divide-y">
                   {rows.map((c, i) => {
                     const due = dueLabel(c);
+                    const heldH = c.status === "on_hold" ? holdHours(c as any) : 0;
                     return (
                       <motion.li key={c.id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.03 }}>
                         <Link to={`${basePath}/dlab/cases`} className="flex items-center gap-3 rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50">
@@ -320,9 +354,18 @@ export default function DlabOverviewPage() {
                               due.tone === "destructive" && "text-destructive", due.tone === "warning" && "text-warning", due.tone === "info" && "text-info", due.tone === "muted" && "text-muted-foreground")}>
                               <Clock3 className="h-3 w-3" />{due.text}
                             </span>
+                            {c.status === "on_hold" && <Badge variant={heldH > STALLED_HOURS ? "destructive" : "secondary"} className="h-5 px-1.5 text-[10px]"><PauseCircle className="mr-0.5 h-3 w-3" />{formatHold(heldH)}</Badge>}
                             {isRush(c) && <Badge variant="secondary" className="h-5 px-1.5 text-[10px]"><Zap className="mr-0.5 h-3 w-3" />Rush</Badge>}
                           </div>
                         </Link>
+                        {c.status === "on_hold" && (
+                          <div className="flex flex-wrap items-center gap-2 pb-2.5 pl-5">
+                            <span className="mr-auto truncate text-xs text-muted-foreground">{(c as any).hold_reason || "No reason given"}</span>
+                            <Button size="sm" variant="outline" className="h-8" disabled={resending === c.id} onClick={() => resend(c)}><Send className="mr-1 h-3.5 w-3.5" />Resend alert</Button>
+                            {c.external_client_phone && <Button size="sm" variant="outline" className="h-8" asChild><a href={waLink(c)} target="_blank" rel="noreferrer"><MessageCircle className="mr-1 h-3.5 w-3.5" />WhatsApp</a></Button>}
+                            <Button size="sm" className="h-8" disabled={hold.isPending} onClick={() => hold.mutate({ id: c.id, reason: null })}><Play className="mr-1 h-3.5 w-3.5" />Resume</Button>
+                          </div>
+                        )}
                       </motion.li>
                     );
                   })}
