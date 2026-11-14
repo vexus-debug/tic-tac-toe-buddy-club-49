@@ -3,16 +3,44 @@
 //   - TanStack devtools (dev-only, first), tanstackStart, viteReact, tailwindcss, tsConfigPaths,
 //     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
-// Never set ssr.external or resolve.external: the Worker has no runtime module resolution, so
-// the build fails. Never add compression (compressPublicAssets, vite-plugin-compression):
-// hosting already compresses at the edge.
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { loadEnv } from "vite";
+import path from "path";
+
+// Load every .env key (incl. OPENROUTER_API_KEY, RESEND_API_KEY) into the server's process.env.
+// Server-only: these are never bundled into browser code (only VITE_* keys are).
+for (const [k, v] of Object.entries(loadEnv(process.env.NODE_ENV === "production" ? "production" : "development", process.cwd(), ""))) {
+  if (process.env[k] === undefined) process.env[k] = v;
+}
+
+// The browser client needs public Supabase settings even when a deployment
+// supplies only the server-side connection variables.
+const supabaseProjectId = process.env['VITE_SUPABASE_PROJECT_ID'] || process.env['SUPABASE_PROJECT_ID'];
+const supabaseUrl = process.env['VITE_SUPABASE_URL'] ||
+  (supabaseProjectId ? `https://${supabaseProjectId}.supabase.co` : undefined);
+const supabasePublishableKey = process.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
+  process.env['SUPABASE_PUBLISHABLE_KEY'] || process.env['SUPABASE_ANON_KEY'];
 
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+  },
+  vite: {
+    define: {
+      ...(supabaseUrl ? { 'import.meta.env.VITE_SUPABASE_URL': JSON.stringify(supabaseUrl) } : {}),
+      ...(supabasePublishableKey
+        ? { 'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(supabasePublishableKey) }
+        : {}),
+    },
+    resolve: {
+      alias: {
+        // The imported app registers a service worker via vite-plugin-pwa's
+        // virtual module; the stub keeps that import working without the plugin.
+        "virtual:pwa-register": path.resolve(__dirname, "src/lib/pwa-register-stub.ts"),
+      },
+    },
   },
 });

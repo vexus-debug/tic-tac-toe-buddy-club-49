@@ -28,3 +28,6 @@ use the editor.
   own key and store it in Secrets.
 - **Secrets.** Lovable manages them. Do not put secret values in the repo.
 <!-- LOVABLE:END -->
+
+## Project rules
+- Lab automation lives in `src/lib/labAutomation/` (trigger registry + templates), separate from clinic patient automation in `src/lib/automation/`, because lab messages go to clinics/doctors, not patients.
