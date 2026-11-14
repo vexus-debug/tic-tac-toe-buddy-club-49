@@ -25,3 +25,15 @@ describe("Pan traveler", () => {
     expect(travelerHtml({ ...base, instructions: "<script>x</script>" })).toContain("&lt;script&gt;x");
   });
 });
+
+import { holdLine } from "@/lib/printTraveler";
+describe("traveler hold line", () => {
+  it("shows how long a held case has waited", () => {
+    expect(holdLine({ hold: { reason: "Unclear margin line", since: "2026-11-12T10:00:00Z" } }, new Date("2026-11-14T13:00:00Z")))
+      .toBe("ON HOLD 2d 3h — awaiting clinic reply: Unclear margin line");
+  });
+  it("shows earlier hold delay once released", () => {
+    expect(holdLine({ hold: null, holdDaysTotal: 2 })).toBe("Previously on hold: 2 days total delay");
+    expect(holdLine({ hold: null, holdDaysTotal: 0 })).toBeNull();
+  });
+});

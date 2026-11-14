@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useOrg } from "@/hooks/useOrg";
 import type { LabCaseRow } from "@/hooks/useLabCases";
+import { notifyLab, notifyIfDispatched } from "@/lib/labAutomation/notify";
 
 export const clientOf = (c: Partial<LabCaseRow>) => c.external_client_name || c.clinic_code || "Walk-in client";
 export const patientOf = (c: Partial<LabCaseRow>) =>
@@ -15,13 +16,14 @@ export const isOverdue = (c: Partial<LabCaseRow>) =>
 
 export function useMoveCase() {
   const qc = useQueryClient();
+  const { currentOrg } = useOrg();
   return useMutation({
     // Start/finish/delivery dates, hold time and the QC gate are enforced by the database.
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       const { error } = await (supabase as any).from("lab_cases").update({ status }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["lab_cases"] }),
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); notifyIfDispatched(currentOrg?.org_id, v.id, v.status); },
     onError: (e: any) => toast({ title: "Could not move case", description: e.message, variant: "destructive" }),
   });
 }
@@ -29,12 +31,13 @@ export function useMoveCase() {
 /** Owner/admin/manager only: ship past a failed or missing QC, with a logged reason. */
 export function useOverrideQcMove() {
   const qc = useQueryClient();
+  const { currentOrg } = useOrg();
   return useMutation({
     mutationFn: async ({ id, status, reason }: { id: string; status: string; reason: string }) => {
       const { error } = await (supabase as any).rpc("lab_override_qc_move", { p_case_id: id, p_status: status, p_reason: reason });
       if (error) throw error;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); toast({ title: "QC override recorded" }); },
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); toast({ title: "QC override recorded" }); notifyIfDispatched(currentOrg?.org_id, v.id, v.status); },
     onError: (e: any) => toast({ title: "Override refused", description: e.message, variant: "destructive" }),
   });
 }
@@ -42,12 +45,14 @@ export function useOverrideQcMove() {
 /** Move many cases in one all-or-nothing step. */
 export function useBatchMove() {
   const qc = useQueryClient();
+  const { currentOrg } = useOrg();
   return useMutation({
     mutationFn: async (moves: { id: string; status: string }[]) => {
       const { data, error } = await (supabase as any).rpc("lab_batch_move", { p_moves: moves });
       if (error) throw error;
       return Number(data || 0);
     },
+    onSuccess: (_n, moves) => moves.forEach((m) => notifyIfDispatched(currentOrg?.org_id, m.id, m.status)),
     onSettled: () => qc.invalidateQueries({ queryKey: ["lab_cases"] }),
   });
 }
@@ -55,6 +60,7 @@ export function useBatchMove() {
 /** Put a case on hold, or release it back to the stage it was in. */
 export function useHoldCase() {
   const qc = useQueryClient();
+  const { currentOrg } = useOrg();
   return useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string | null }) => {
       const sb = supabase as any;
@@ -69,7 +75,7 @@ export function useHoldCase() {
       const { error } = await sb.from("lab_cases").update({ status: back, hold_reason: null, hold_at: null }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); toast({ title: v.reason ? "Case on hold" : "Hold released" }); },
+    onSuccess: (_d, v) => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); toast({ title: v.reason ? "Case on hold" : "Hold released", description: v.reason ? "The clinic is being alerted." : undefined }); if (v.reason) void notifyLab(currentOrg?.org_id, v.id, "case_on_hold"); },
     onError: (e: any) => toast({ title: "Could not update hold", description: e.message, variant: "destructive" }),
   });
 }
@@ -92,7 +98,7 @@ export function useCreateDentalLabCase() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); qc.invalidateQueries({ queryKey: ["case-wallet"] }); toast({ title: "Case received" }); },
+    onSuccess: (row: any) => { qc.invalidateQueries({ queryKey: ["lab_cases"] }); qc.invalidateQueries({ queryKey: ["case-wallet"] }); toast({ title: "Case received" }); if (row?.id) void notifyLab(currentOrg?.org_id, row.id, "case_received"); },
     onError: (e: any) => isNoCreditsError(e)
       ? toast({ title: "No case credits left", description: NO_CREDITS_MESSAGE, variant: "destructive" })
       : toast({ title: "Could not create case", description: e.message, variant: "destructive" }),

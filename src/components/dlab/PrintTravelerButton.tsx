@@ -16,6 +16,7 @@ export function PrintTravelerButton({ c, technician, compact }: { c: any; techni
       labName: currentOrg?.org_name || "Dental Lab", case_number: c.case_number, clinic: clientOf(c), doctor: c.clinic_doctor_name,
       patient: patientOf(c), work_type: c.work_type, material: c.material, shade: c.shade, teeth, due_date: c.due_date,
       rush: isRush(c), technician, instructions: c.instructions,
+      hold: c.status === "on_hold" ? { reason: c.hold_reason, since: c.hold_at } : null, holdDaysTotal: c.hold_days_total,
     }, size);
     if (!ok) toast({ title: "Pop-up blocked", description: "Allow pop-ups to print the traveler.", variant: "destructive" });
   };
